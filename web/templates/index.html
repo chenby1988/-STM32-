@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STM32 智能环境监测站</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span>🖥️</span>
+                STM32 智能环境监测站
+            </h1>
+            <p class="subtitle">虚拟硬件模拟系统 | Virtual STM32F103C8T6 + Sensor Array</p>
+            <div class="status-bar">
+                <div class="status-pill online" id="mcu-status">
+                    <span class="dot"></span>
+                    <span>MCU 运行中</span>
+                </div>
+                <div class="status-pill" id="alarm-status">
+                    <span class="dot"></span>
+                    <span>系统正常</span>
+                </div>
+                <div class="status-pill">
+                    <span>⏱️ 运行时间: <span id="uptime">0s</span></span>
+                </div>
+                <div class="status-pill">
+                    <span>🕐 <span id="clock">--:--:--</span></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 传感器实时数据 -->
+        <div class="sensors-grid" id="sensors-grid">
+            <div class="sensor-card" id="card-temp">
+                <div class="sensor-icon">🌡️</div>
+                <div class="sensor-name">温度</div>
+                <div class="sensor-value"><span id="val-temp">--</span><span class="unit">°C</span></div>
+                <div class="sensor-status normal" id="status-temp">正常</div>
+            </div>
+            <div class="sensor-card" id="card-humidity">
+                <div class="sensor-icon">💧</div>
+                <div class="sensor-name">湿度</div>
+                <div class="sensor-value"><span id="val-humidity">--</span><span class="unit">%</span></div>
+                <div class="sensor-status normal" id="status-humidity">正常</div>
+            </div>
+            <div class="sensor-card" id="card-aqi">
+                <div class="sensor-icon">🌫️</div>
+                <div class="sensor-name">空气质量 (AQI)</div>
+                <div class="sensor-value"><span id="val-aqi">--</span></div>
+                <div class="sensor-status normal" id="status-aqi">正常</div>
+            </div>
+            <div class="sensor-card" id="card-light">
+                <div class="sensor-icon">☀️</div>
+                <div class="sensor-name">光照强度</div>
+                <div class="sensor-value"><span id="val-light">--</span><span class="unit">lux</span></div>
+                <div class="sensor-status normal" id="status-light">正常</div>
+            </div>
+            <div class="sensor-card" id="card-noise">
+                <div class="sensor-icon">🔊</div>
+                <div class="sensor-name">环境噪音</div>
+                <div class="sensor-value"><span id="val-noise">--</span><span class="unit">dB</span></div>
+                <div class="sensor-status normal" id="status-noise">正常</div>
+            </div>
+            <div class="sensor-card" id="card-pressure">
+                <div class="sensor-icon">🌡️</div>
+                <div class="sensor-name">气压</div>
+                <div class="sensor-value"><span id="val-pressure">--</span><span class="unit">hPa</span></div>
+                <div class="sensor-status normal" id="status-pressure">正常</div>
+            </div>
+        </div>
+
+        <!-- 图表 -->
+        <div class="charts-section">
+            <div class="chart-card">
+                <h3>📈 温湿度趋势</h3>
+                <div class="chart-container">
+                    <canvas id="chart-temp-hum"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>📊 空气质量与光照</h3>
+                <div class="chart-container">
+                    <canvas id="chart-aqi-light"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-records">--</div>
+                <div class="stat-label">今日记录数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-avg-temp">--</div>
+                <div class="stat-label">平均温度</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-avg-aqi">--</div>
+                <div class="stat-label">平均AQI</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-avg-pressure">--</div>
+                <div class="stat-label">平均气压</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-alarms">--</div>
+                <div class="stat-label">今日告警</div>
+            </div>
+        </div>
+
+        <!-- 告警记录 -->
+        <div class="alarms-section">
+            <h3>🚨 最近告警</h3>
+            <div class="alarm-list" id="alarm-list">
+                <div class="alarm-item empty">暂无告警记录</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局数据缓存
+        const historyData = {
+            labels: [],
+            temperature: [],
+            humidity: [],
+            aqi: [],
+            light: [],
+            noise: [],
+            pressure: []
+        };
+        const MAX_POINTS = 60;
+
+        // 图表初始化
+        const ctxTempHum = document.getElementById('chart-temp-hum').getContext('2d');
+        const chartTempHum = new Chart(ctxTempHum, {
+            type: 'line',
+            data: {
+                labels: historyData.labels,
+                datasets: [
+                    {
+                        label: '温度 (°C)',
+                        data: historyData.temperature,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: '湿度 (%)',
+                        data: historyData.humidity,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.3,
+                        pointRadius: 0,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 }, grid: { color: '#334155' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                }
+            }
+        });
+
+        const ctxAqiLight = document.getElementById('chart-aqi-light').getContext('2d');
+        const chartAqiLight = new Chart(ctxAqiLight, {
+            type: 'line',
+            data: {
+                labels: historyData.labels,
+                datasets: [
+                    {
+                        label: 'AQI',
+                        data: historyData.aqi,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.3,
+                        pointRadius: 0,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: '光照 (lux)',
+                        data: historyData.light,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.3,
+                        pointRadius: 0,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 }, grid: { color: '#334155' } },
+                    y: { 
+                        type: 'linear', 
+                        display: true, 
+                        position: 'left',
+                        ticks: { color: '#94a3b8' }, 
+                        grid: { color: '#334155' } 
+                    },
+                    y1: { 
+                        type: 'linear', 
+                        display: true, 
+                        position: 'right',
+                        ticks: { color: '#94a3b8' }, 
+                        grid: { display: false } 
+                    }
+                }
+            }
+        });
+
+        // 阈值配置
+        const thresholds = {
+            temperature: { min: 10, max: 35 },
+            humidity: { min: 30, max: 70 },
+            air_quality: { max: 200 },
+            light: { min: 50, max: 10000 },
+            noise: { max: 70 }
+        };
+
+        function updateSensorCard(sensor, value, alarms) {
+            const valEl = document.getElementById('val-' + sensor);
+            const statusEl = document.getElementById('status-' + sensor);
+            const cardEl = document.getElementById('card-' + sensor);
+            
+            if (valEl) valEl.textContent = value !== null && value !== undefined ? value : '--';
+            
+            if (alarms && alarms[sensor]) {
+                statusEl.textContent = '告警';
+                statusEl.className = 'sensor-status danger';
+                cardEl.classList.add('alarm');
+            } else {
+                statusEl.textContent = '正常';
+                statusEl.className = 'sensor-status normal';
+                cardEl.classList.remove('alarm');
+            }
+        }
+
+        function updateHistory(data) {
+            const now = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            historyData.labels.push(now);
+            historyData.temperature.push(data.temperature);
+            historyData.humidity.push(data.humidity);
+            historyData.aqi.push(data.air_quality_aqi);
+            historyData.light.push(data.light_lux);
+            historyData.noise.push(data.noise_db);
+            historyData.pressure.push(data.pressure_hpa);
+
+            if (historyData.labels.length > MAX_POINTS) {
+                historyData.labels.shift();
+                historyData.temperature.shift();
+                historyData.humidity.shift();
+                historyData.aqi.shift();
+                historyData.light.shift();
+                historyData.noise.shift();
+                historyData.pressure.shift();
+            }
+
+            chartTempHum.update('none');
+            chartAqiLight.update('none');
+        }
+
+        function updateAlarms(alarms) {
+            const list = document.getElementById('alarm-list');
+            const alarmStatus = document.getElementById('alarm-status');
+            
+            if (Object.keys(alarms).length === 0) {
+                list.innerHTML = '<div class="alarm-item empty">暂无活跃告警</div>';
+                alarmStatus.className = 'status-pill online';
+                alarmStatus.innerHTML = '<span class="dot"></span><span>系统正常</span>';
+                return;
+            }
+
+            alarmStatus.className = 'status-pill alarm';
+            alarmStatus.innerHTML = '<span class="dot"></span><span>有告警!</span>';
+
+            let html = '';
+            for (const [sensor, msg] of Object.entries(alarms)) {
+                html += `<div class="alarm-item">
+                    <span class="time">${new Date().toLocaleTimeString('zh-CN')}</span>
+                    <span class="message">${msg}</span>
+                </div>`;
+            }
+            list.innerHTML = html;
+        }
+
+        async function fetchCurrent() {
+            try {
+                const res = await fetch('/api/current');
+                const json = await res.json();
+                if (!json.success) return;
+                
+                const data = json.data;
+                const alarm = json.alarm;
+                
+                if (!data) return;
+
+                updateSensorCard('temp', data.temperature, alarm.alarms);
+                updateSensorCard('humidity', data.humidity, alarm.alarms);
+                updateSensorCard('aqi', data.air_quality_aqi, alarm.alarms);
+                updateSensorCard('light', data.light_lux, alarm.alarms);
+                updateSensorCard('noise', data.noise_db, alarm.alarms);
+
+                document.getElementById('uptime').textContent = data.uptime_s + 's';
+                updateAlarms(alarm.alarms);
+                updateHistory(data);
+            } catch (e) {
+                console.error('获取数据失败:', e);
+            }
+        }
+
+        async function fetchStatistics() {
+            try {
+                const res = await fetch('/api/statistics?hours=24');
+                const json = await res.json();
+                if (!json.success) return;
+                const s = json.statistics;
+                document.getElementById('stat-records').textContent = s.total_records || 0;
+                document.getElementById('stat-avg-temp').textContent = s.avg_temperature !== null ? s.avg_temperature + '°C' : '--';
+                document.getElementById('stat-avg-aqi').textContent = s.avg_aqi !== null ? s.avg_aqi : '--';
+                document.getElementById('stat-avg-pressure').textContent = s.avg_pressure !== null ? s.avg_pressure + 'hPa' : '--';
+            } catch (e) {
+                console.error('获取统计失败:', e);
+            }
+        }
+
+        async function fetchAlarms() {
+            try {
+                const res = await fetch('/api/alarms?limit=10');
+                const json = await res.json();
+                if (!json.success) return;
+                // 告警列表由实时接口更新，这里只做计数
+                const count = json.alarms ? json.alarms.length : 0;
+                document.getElementById('stat-alarms').textContent = count;
+            } catch (e) {
+                console.error('获取告警失败:', e);
+            }
+        }
+
+        function updateClock() {
+            document.getElementById('clock').textContent = new Date().toLocaleTimeString('zh-CN');
+        }
+
+        // 启动定时刷新
+        setInterval(fetchCurrent, 1000);
+        setInterval(fetchStatistics, 30000);
+        setInterval(fetchAlarms, 30000);
+        setInterval(updateClock, 1000);
+
+        // 初始加载
+        fetchCurrent();
+        fetchStatistics();
+        fetchAlarms();
+        updateClock();
+    </script>
+</body>
+</html>
