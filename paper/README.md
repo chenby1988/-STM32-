@@ -10,11 +10,19 @@
 | `main_en.tex` | LaTeX 源文件（英文版） | - | ~55 KB |
 | `paper_chinese.pdf` | 中文版论文 PDF | 53 页 | ~788 KB |
 | `paper_english.pdf` | 英文版论文 PDF | 58 页 | ~256 KB |
+| `paper_french.pdf` | 法文版论文 PDF | - | ~293 KB |
+| `paper_spanish.pdf` | 西班牙文版论文 PDF | - | ~285 KB |
+| `paper_russian.pdf` | 俄文版论文 PDF | - | ~301 KB |
+| `paper_arabic.pdf` | 阿拉伯文版论文 PDF | - | ~328 KB |
 
 ## 在线查看
 
 - [中文版 PDF](https://github.com/chenby1988/-STM32-/blob/main/paper/paper_chinese.pdf)
 - [英文版 PDF](https://github.com/chenby1988/-STM32-/blob/main/paper/paper_english.pdf)
+- [法文版 PDF](https://github.com/chenby1988/-STM32-/blob/main/paper/paper_french.pdf)
+- [西班牙文版 PDF](https://github.com/chenby1988/-STM32-/blob/main/paper/paper_spanish.pdf)
+- [俄文版 PDF](https://github.com/chenby1988/-STM32-/blob/main/paper/paper_russian.pdf)
+- [阿拉伯文版 PDF](https://github.com/chenby1988/-STM32-/blob/main/paper/paper_arabic.pdf)
 
 ## 本地编译
 
